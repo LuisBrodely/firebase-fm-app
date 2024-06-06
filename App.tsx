@@ -11,6 +11,7 @@ import Signup from './src/screens/Signup';
 import Chat from './src/screens/Chat';
 import Home from './src/screens/Home';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import PostModal from './src/screens/Post';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -61,12 +62,12 @@ function ChatStack() {
         }}
       />
       <Tab.Screen
-        name='Chat'
-        component={Chat}
+        name='PostModal'
+        component={PostModal}
         options={{
           tabBarIcon: ({ focused }) => (
             <View style={styles.iconContainer}>
-              <FontAwesome6 name="edit" size={24} color="#4D4D4D" />
+              <FontAwesome6 name="plus" size={24} color="#4D4D4D" />
               {focused && <View style={styles.activeIndicator} />}
             </View>
           ),
