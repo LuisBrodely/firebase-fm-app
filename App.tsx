@@ -2,7 +2,7 @@ import React, { useState, createContext, useContext, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { View, ActivityIndicator } from 'react-native';
-import { onAuthStateChanged } from 'firebase/auth';
+import { User, onAuthStateChanged } from 'firebase/auth';
 import { auth } from './src/config/firebase';
 import Login from './src/screens/Login';
 import Signup from './src/screens/Signup';
@@ -13,7 +13,7 @@ const Stack = createStackNavigator();
 const AuthenticatedUserContext = createContext({});
 
 const AuthenticatedUserProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
 return (
     <AuthenticatedUserContext.Provider value={{ user, setUser }}>
       {children}
