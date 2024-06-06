@@ -102,13 +102,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#323333',
   },
-  backImage: {
-    width: "100%",
-    height: 340,
-    position: "absolute",
-    top: 0,
-    resizeMode: 'cover',
-  },
   form: {
     flex: 1,
     justifyContent: 'center',
