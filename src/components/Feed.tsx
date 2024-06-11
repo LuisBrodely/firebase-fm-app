@@ -3,21 +3,24 @@ import { View, Text, Image, TouchableOpacity, TextInput, ActivityIndicator, Scro
 import { AntDesign, Ionicons, Feather } from '@expo/vector-icons';
 import Fire from '../utils/Fire';
 import { collection, getDocs } from "firebase/firestore";
-
+import { ResizeMode, Video } from 'expo-av';
+import moment from 'moment';
 
 interface Post {
     id: string;
-    image: string;
+    media: string;
     text: string;
     timestamp: number;
     uid: string;
     likes: number;
     isLiked: boolean;
-    time: number;
+    mediaType: 'image' | 'video';
+    userAvatar: string | null,
+    userName: string,
+    userEmail: string
 }
 
-
-const Feed = () => {
+export default function Feed() {
     const [posts, setPosts] = useState<Post[]>([]);
     const [loading, setLoading] = useState(true);
     const [likes, setLikes] = useState<{ [key: string]: boolean }>({});
@@ -30,13 +33,16 @@ const Feed = () => {
                 const data = doc.data();
                 fetchedPosts.push({
                     id: doc.id,
-                    image: data.image,
+                    media: data.media,
                     text: data.text,
                     timestamp: data.timestamp,
                     uid: data.uid,
-                    likes: 45, // Default likes to 0, can be updated to actual data if available
-                    isLiked: false, // Default isLiked to false, can be updated to actual data if available
-                    time: Math.floor((Date.now() - data.timestamp) / 60000), // Time in minutes
+                    likes: data.likes || 0,
+                    isLiked: false,
+                    mediaType: data.mediaType,
+                    userAvatar: data.userAvatar,
+                    userName: data.userName,
+                    userEmail: data.userEmail
                 });
             });
             setPosts(fetchedPosts);
@@ -46,10 +52,9 @@ const Feed = () => {
         }
     };
 
-
     useEffect(() => {
         fetchPosts();
-    });
+    }, []);
 
     const toggleLike = (postId: string) => {
         setLikes((prevLikes) => ({
@@ -67,13 +72,14 @@ const Feed = () => {
 
     if (loading) {
         return (
-            <View style={{ backgroundColor: '#101010' }}>
+            <View style={{ backgroundColor: '#101010', height: '100%', width: '100%', flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                 <ActivityIndicator size="large" color="#F1F1F1" />
             </View>
         )
     }
+
     return (
-        <ScrollView onScroll={handleScroll} scrollEventThrottle={16}>
+        <ScrollView onScroll={handleScroll} scrollEventThrottle={16} style={{ height: '100%', width: '100%' }}>
             {posts.map((data) => (
                 <View
                     key={data.id}
@@ -91,17 +97,17 @@ const Feed = () => {
                         }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <Image
-                                source={{ uri: data.image }}
+                                source={{ uri: data.userAvatar ?? '' }}
                                 style={{ width: 40, height: 40, borderRadius: 100 }}
                             />
-                            <View style={{ paddingLeft: 5 }}>
+                            <View style={{ paddingLeft: 16 }}>
                                 <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#f1f1f1', }}>
-                                    Luis Brodely {/* Foto del usuario y nombre */}
+                                    {data.userName}
                                 </Text>
                             </View>
                         </View>
                         <View style={{ flexDirection: 'row', gap: 10 }}>
-                            <Text style={{ color: '#777777' }}>{data.time} min</Text>
+                            <Text style={{ color: '#777777' }}>{moment(data.timestamp).fromNow()}</Text>
                             <Feather name="more-horizontal" style={{ fontSize: 20, color: '#f1f1f1', }} />
                         </View>
                     </View>
@@ -111,10 +117,20 @@ const Feed = () => {
                             justifyContent: 'center',
                             alignItems: 'center',
                         }}>
-                        <Image
-                            source={{ uri: data.image }}
-                            style={{ width: '100%', height: 400 }}
-                        />
+                        {data.mediaType === 'image' ? (
+                            <Image
+                                source={{ uri: data.media }}
+                                style={{ width: '100%', height: 400 }}
+                            />
+                        ) : (
+                            <Video
+                                source={{ uri: data.media }}
+                                style={{ width: '100%', height: 400 }}
+                                useNativeControls
+                                resizeMode={ResizeMode.CONTAIN}
+                                isLooping
+                            />
+                        )}
                     </View>
                     <View
                         style={{
@@ -150,7 +166,7 @@ const Feed = () => {
                     <View style={{ paddingHorizontal: 15 }}>
                         <Text style={{ color: '#f1f1f1', fontWeight: '700' }}>
                             Liked by {likes[data.id] ? 'you and' : ''}{' '}
-                            {likes[data.id] ? data.likes + 1 : data.likes} others
+                            {likes[data.id] ? data.likes : data.likes} others
                         </Text>
                         <Text
                             style={{
@@ -161,32 +177,9 @@ const Feed = () => {
                             }}>
                             {data.text}
                         </Text>
-                        <Text style={{ opacity: 0.4, paddingVertical: 2, color: '#f1f1f1' }}>
-                            View all comments
-                        </Text>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <Image
-                                    source={{ uri: data.image }}
-                                    style={{
-                                        width: 25,
-                                        height: 25,
-                                        borderRadius: 100,
-                                        backgroundColor: '#fff',
-                                        marginRight: 10,
-                                    }}
-                                />
-                                <TextInput
-                                    placeholder="Add a comment "
-                                    style={{ color: '#f1f1f1', }}
-                                />
-                            </View>
-                        </View>
                     </View>
                 </View>
             ))}
         </ScrollView>
     );
-};
-
-export default Feed;
+}

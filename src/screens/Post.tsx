@@ -1,95 +1,226 @@
 import React, { useEffect, useState } from 'react'
-import { View, Text, TouchableOpacity, SafeAreaView, StyleSheet, Image, TextInput } from 'react-native'
+import { View, Text, TouchableOpacity, SafeAreaView, StyleSheet, Image, TextInput, Button } from 'react-native'
 import { Feather } from '@expo/vector-icons'
-import Constants from 'expo-constants'
-import * as MediaLibrary from 'expo-media-library'
 import Fire from '../utils/Fire'
 import * as ImagePicker from 'expo-image-picker'
+import { ResizeMode, Video, Audio } from 'expo-av';
+import UserPermissions from '../utils/UserPermissions'
+import { collection, getDocs } from 'firebase/firestore'
+import { User } from '../types/UserTypes'
 
 interface Post {
     text: string;
-    image: string | null;
+    media: string | null;
+    mediaType: 'image' | 'video' | null;
 }
 
 
+interface Recording {
+    sound: Audio.Sound;
+    duration: string;
+    file: string | null;
+}
 
 export default function PostModal() {
 
-    const [post, setPost] = useState<Post>({ text: "", image: null });
+    const [post, setPost] = useState<Post>({ text: "", media: null, mediaType: null });
+    const [user, setUser] = useState<User | null>(null);
+    const [recording, setRecording] = useState<Audio.Recording | null>(null);
+    const [recordings, setRecordings] = useState<Recording[]>([]);
 
-    const getPhotoPermissions = async () => {
-        if (Constants.platform?.ios) {
-            const { status } = await MediaLibrary.requestPermissionsAsync();
-
-            if (status !== "granted") {
-                alert('We need permissions to access your camera roll');
+    useEffect(() => {
+        return recording
+            ? () => {
+                recording.stopAndUnloadAsync().catch(error => console.warn(error));
             }
+            : undefined;
+    }, [recording]);
+
+    async function startRecording() {
+        try {
+            const permission = await Audio.requestPermissionsAsync();
+            if (!permission.granted) {
+                alert("Permission to access microphone is required!");
+                return;
+            }
+
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: true,
+                playsInSilentModeIOS: true,
+            });
+
+            const recordingOptions = {
+                android: {
+                    extension: '.m4a',
+                    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+                    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+                    sampleRate: 44100,
+                    numberOfChannels: 2,
+                    bitRate: 128000,
+                },
+                ios: {
+                    extension: '.caf',
+                    audioQuality: Audio.IOSAudioQuality.HIGH,
+                    sampleRate: 44100,
+                    numberOfChannels: 2,
+                    bitRate: 128000,
+                    linearPCMBitDepth: 16,
+                    linearPCMIsBigEndian: false,
+                    linearPCMIsFloat: false,
+                },
+                web: {},
+            };
+
+            const newRecording = new Audio.Recording();
+            await newRecording.prepareToRecordAsync(recordingOptions);
+            await newRecording.startAsync();
+            setRecording(newRecording);
+        } catch (error: any) {
+            alert(error.message);
         }
     }
 
+    async function stopRecording() {
+        try {
+            if (!recording) return;
+
+            await recording.stopAndUnloadAsync();
+            const uri = recording.getURI();
+            const { sound, status } = await recording.createNewLoadedSoundAsync();
+            const durationMillis = (status as any).playableDurationMillis;
+            const newRecordings: Recording[] = [...recordings, {
+                sound,
+                duration: getDurationFormatted(durationMillis),
+                file: uri
+            }];
+            setRecording(null);
+            setRecordings(newRecordings);
+        } catch (error: any) {
+            alert(error.message);
+        }
+    }
+
+    function getDurationFormatted(milliseconds: number) {
+        const minutes = Math.floor(milliseconds / 1000 / 60);
+        const seconds = Math.round((milliseconds / 1000) % 60);
+        return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+    }
+
+    function getRecordingLines() {
+        return recordings.map((recordingLine, index) => (
+            <View key={index} style={{ flexDirection: 'row', justifyContent: 'space-between', marginVertical: 8 }}>
+                <Text style={{ color: 'white' }}>Recording #{index + 1} | {recordingLine.duration}</Text>
+                <Button title='Play' onPress={() => recordingLine.sound.replayAsync()} />
+            </View>
+        ));
+    }
+
+    function clearRecordings() {
+        setRecordings([]);
+    }
+
     useEffect(() => {
-        getPhotoPermissions();
+        UserPermissions.shared.getPhotoPermissions();
     }, []);
 
 
-    const pickImage = async () => {
+    useEffect(() => {
+        const fetchUser = async () => {
+            const userId = Fire.shared.uid;
+            if (!userId) {
+                console.error("No user authenticated");
+                return;
+            }
+            try {
+                const querySnapshot = await getDocs(collection(Fire.shared.firestore, "users"));
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data.id === userId) {
+                        setUser(data as User);
+                    }
+                });
+            } catch (error) {
+                console.error("Error fetching user: ", error);
+            }
+        };
+        fetchUser();
+    }, []);
+
+
+    const pickMedia = async () => {
         let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ImagePicker.MediaTypeOptions.All,
             allowsEditing: true,
             aspect: [4, 3]
         });
 
         if (!result.canceled && result.assets && result.assets.length > 0) {
-            setPost({ ...post, image: result.assets[0].uri });
+            const mediaType = result.assets[0].type === 'video' ? 'video' : 'image';
+            setPost({ ...post, media: result.assets[0].uri, mediaType });
         }
     };
 
     const handlePost = () => {
-        Fire.shared.addPost({ text: post.text.trim(), localUri: post.image }).then((ref: any) => {
-            setPost({ text: "", image: null })
-            alert("Ahuevo, buena publicacion papulince")
+        Fire.shared.addPost({ text: post.text.trim(), localUri: post.media, mediaType: post.mediaType }).then((ref: any) => {
+            setPost({ text: "", media: null, mediaType: null });
+            alert("Ahuevo, buena publicacion papulince");
         }).catch((err: any) => {
-            alert(err)
-        })
-    }
-
-
+            alert(err);
+        });
+    };
 
 
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity>
-                    <Feather name='arrow-left' size={24} color="#D8D9DB"></Feather>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handlePost}>
-                    <Text style={{ color: '#F1F1F1' }}>Post</Text>
+                <TouchableOpacity style={styles.button} onPress={handlePost}>
+                    <Text style={{ fontWeight: 'semibold', color: '#fff', fontSize: 14 }}>Post</Text>
                 </TouchableOpacity>
             </View>
             <View style={styles.inputContainer}>
-                <Image source={require("../../assets/avatar2.jpeg")} style={styles.avatar}></Image>
+                <Image
+                    source={user?.avatar ? { uri: user.avatar } : require('../../assets/mockup.jpeg')}
+                    style={styles.avatar}
+                />
                 <TextInput
                     autoFocus={true}
                     multiline={true}
                     numberOfLines={4}
-                    style={{ flex: 1 , color:'white'}}
+                    style={{ flex: 1, color: 'white' }}
                     placeholder='Want to share something?'
                     onChangeText={(text) => setPost({ ...post, text })}
                     value={post.text}
                 ></TextInput>
             </View>
-            <TouchableOpacity style={styles.photo} onPress={pickImage}>
-                <Feather name='camera' size={24} color="#D8D9DB"></Feather>
-            </TouchableOpacity>
-
+            <View style={{ justifyContent: 'flex-end', flexDirection: 'row', marginHorizontal: 32, gap: 16 }}>
+                <TouchableOpacity onPress={recording ? stopRecording : startRecording}>
+                    <Feather name='mic' size={24} color={recording ? "#FF3040" : "#D8D9DB"}></Feather>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={pickMedia}>
+                    <Feather name='camera' size={24} color="#D8D9DB"></Feather>
+                </TouchableOpacity>
+            </View>
             <View
-                style={{ marginHorizontal: 32, marginTop: 32, height: 150 }}
+                style={{ marginHorizontal: 12, marginTop: 32, height: 350 }}
             >
-                {post.image && (
-                    <Image source={{ uri: post.image }} style={{ width: '100%', height: '100%' }} />
+                {getRecordingLines()}
+                <Button title={recordings.length > 0 ? 'Clear recordings' : ''} onPress={clearRecordings} />
+                {post.media && post.mediaType === 'video' && (
+                    <Video
+                        source={{ uri: post.media }}
+                        style={{ width: '100%', height: '100%' }}
+                        useNativeControls
+                        resizeMode={ResizeMode.CONTAIN}
+                        isLooping
+                    />
+                )}
+                {post.media && post.mediaType === 'image' && (
+                    <Image
+                        source={{ uri: post.media }}
+                        style={{ width: '100%', height: '100%' }}
+                    />
                 )}
             </View>
-
         </SafeAreaView>
     )
 }
@@ -101,24 +232,32 @@ const styles = StyleSheet.create({
     },
     header: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        paddingHorizontal: 32,
+        justifyContent: 'flex-end',
+        paddingHorizontal: 16,
         paddingVertical: 12,
         borderBottomWidth: 0.3,
         borderBottomColor: '#777777'
     },
+    button: {
+        backgroundColor: '#47D7AB',
+        height: 32,
+        width: 60,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     inputContainer: {
-        margin: 32,
+        marginVertical: 32,
+        marginHorizontal: 12,
         flexDirection: 'row'
     },
     avatar: {
         width: 48,
         height: 48,
         borderRadius: 24,
-        marginRight: 16
+        marginRight: 12
     },
     photo: {
-        alignItems: 'flex-end',
         marginHorizontal: 32
     }
 })

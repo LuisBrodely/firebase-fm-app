@@ -72,7 +72,7 @@ export default function Login({ navigation }: { navigation: any }) {
           <Text style={{ fontWeight: 'regular', color: '#fff', fontSize: 14 }}> Continue with Google</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.social}>
-        <Image source={require('../../assets/apple.png')} style={styles.icon} />
+          <Image source={require('../../assets/apple.png')} style={styles.icon} />
           <Text style={{ fontWeight: 'regular', color: '#fff', fontSize: 14 }}> Continue with Apple</Text>
         </TouchableOpacity>
       </SafeAreaView>
